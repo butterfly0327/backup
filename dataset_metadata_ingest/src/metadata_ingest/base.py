@@ -20,75 +20,75 @@ _SOURCE_THROTTLE_PROFILES: Dict[str, Dict[str, float]] = {
     # 크롤링 계열: 가장 보수적
     "AI_HUB": {
         "min_request_interval_seconds": 4.0,
-        "request_interval_jitter_seconds": 1.2,
-        "batch_pause_every": 3.0,
-        "batch_pause_seconds": 30.0,
-        "per_source_cooldown_seconds": 90.0,
-    },
-    "PUBLIC_DATA_PORTAL": {
-        "min_request_interval_seconds": 3.2,
-        "request_interval_jitter_seconds": 1.0,
+        "request_interval_jitter_seconds": 1.1,
         "batch_pause_every": 4.0,
         "batch_pause_seconds": 24.0,
         "per_source_cooldown_seconds": 75.0,
     },
-    # 인증/대형 플랫폼: 보수적
-    "KAGGLE": {
-        "min_request_interval_seconds": 2.8,
+    "PUBLIC_DATA_PORTAL": {
+        "min_request_interval_seconds": 3.2,
         "request_interval_jitter_seconds": 0.9,
-        "batch_pause_every": 5.0,
+        "batch_pause_every": 6.0,
         "batch_pause_seconds": 18.0,
         "per_source_cooldown_seconds": 60.0,
     },
-    "HUGGINGFACE": {
-        "min_request_interval_seconds": 2.6,
-        "request_interval_jitter_seconds": 0.9,
-        "batch_pause_every": 5.0,
-        "batch_pause_seconds": 16.0,
-        "per_source_cooldown_seconds": 55.0,
-    },
-    "DATA_GOV": {
-        "min_request_interval_seconds": 2.2,
-        "request_interval_jitter_seconds": 0.7,
+    # 인증/대형 플랫폼: 보수적
+    "KAGGLE": {
+        "min_request_interval_seconds": 2.7,
+        "request_interval_jitter_seconds": 0.8,
         "batch_pause_every": 6.0,
         "batch_pause_seconds": 14.0,
-        "per_source_cooldown_seconds": 45.0,
+        "per_source_cooldown_seconds": 50.0,
     },
-    "DATA_EUROPA": {
-        "min_request_interval_seconds": 2.0,
-        "request_interval_jitter_seconds": 0.6,
+    "HUGGINGFACE": {
+        "min_request_interval_seconds": 2.4,
+        "request_interval_jitter_seconds": 0.8,
         "batch_pause_every": 6.0,
         "batch_pause_seconds": 12.0,
-        "per_source_cooldown_seconds": 40.0,
+        "per_source_cooldown_seconds": 50.0,
     },
-    # 비교적 안정 API: 기본보다 보수적
-    "HARVARD_DATAVERSE": {
+    "DATA_GOV": {
+        "min_request_interval_seconds": 1.7,
+        "request_interval_jitter_seconds": 0.5,
+        "batch_pause_every": 8.0,
+        "batch_pause_seconds": 10.0,
+        "per_source_cooldown_seconds": 35.0,
+    },
+    "DATA_EUROPA": {
         "min_request_interval_seconds": 1.8,
         "request_interval_jitter_seconds": 0.5,
         "batch_pause_every": 8.0,
-        "batch_pause_seconds": 10.0,
+        "batch_pause_seconds": 8.0,
         "per_source_cooldown_seconds": 30.0,
     },
+    # 비교적 안정 API: 기본보다 보수적
+    "HARVARD_DATAVERSE": {
+        "min_request_interval_seconds": 1.6,
+        "request_interval_jitter_seconds": 0.4,
+        "batch_pause_every": 10.0,
+        "batch_pause_seconds": 7.0,
+        "per_source_cooldown_seconds": 24.0,
+    },
     "FIGSHARE": {
-        "min_request_interval_seconds": 1.7,
-        "request_interval_jitter_seconds": 0.5,
-        "batch_pause_every": 8.0,
-        "batch_pause_seconds": 10.0,
-        "per_source_cooldown_seconds": 28.0,
+        "min_request_interval_seconds": 1.5,
+        "request_interval_jitter_seconds": 0.4,
+        "batch_pause_every": 10.0,
+        "batch_pause_seconds": 7.0,
+        "per_source_cooldown_seconds": 22.0,
     },
     "ZENODO": {
         "min_request_interval_seconds": 1.7,
-        "request_interval_jitter_seconds": 0.5,
-        "batch_pause_every": 8.0,
-        "batch_pause_seconds": 10.0,
-        "per_source_cooldown_seconds": 28.0,
+        "request_interval_jitter_seconds": 0.6,
+        "batch_pause_every": 10.0,
+        "batch_pause_seconds": 8.0,
+        "per_source_cooldown_seconds": 26.0,
     },
     "AWS_ODR": {
-        "min_request_interval_seconds": 1.9,
-        "request_interval_jitter_seconds": 0.6,
-        "batch_pause_every": 7.0,
-        "batch_pause_seconds": 12.0,
-        "per_source_cooldown_seconds": 35.0,
+        "min_request_interval_seconds": 1.6,
+        "request_interval_jitter_seconds": 0.4,
+        "batch_pause_every": 9.0,
+        "batch_pause_seconds": 8.0,
+        "per_source_cooldown_seconds": 26.0,
     },
 }
 

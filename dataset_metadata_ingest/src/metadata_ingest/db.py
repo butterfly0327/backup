@@ -178,7 +178,7 @@ class Database:
                     SELECT checkpoint_json
                     FROM collection_dataset
                     WHERE dataset_source_id = %s
-                      AND status IN ('RUNNING', 'FAILED', 'STOPPED', 'PARTIAL_SUCCESS')
+                      AND status IN ('RUNNING', 'FAILED', 'STOPPED', 'PARTIAL_SUCCESS', 'SUCCESS')
                     ORDER BY id DESC
                     LIMIT 1
                     """,

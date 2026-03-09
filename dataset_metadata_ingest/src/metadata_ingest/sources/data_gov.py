@@ -27,7 +27,9 @@ class DataGovCollector(BaseDatasetCollector):
     source = SOURCE
     PAGE_SIZE = 500
 
-    def iter_records(self, checkpoint: Dict[str, Any]) -> Iterator[Tuple[NormalizedDatasetRecord, Dict[str, Any]]]:
+    def iter_records(
+        self, checkpoint: Dict[str, Any]
+    ) -> Iterator[Tuple[NormalizedDatasetRecord, Dict[str, Any]]]:
         if not self.settings.data_gov_api_key:
             raise ValueError("DATA_GOV_API_KEY 환경변수가 필요합니다.")
 
@@ -63,14 +65,26 @@ class DataGovCollector(BaseDatasetCollector):
 
     def _normalize(self, raw: Dict[str, Any]) -> NormalizedDatasetRecord:
         source_key = clean_text(raw.get("id") or raw.get("name")) or ""
-        landing_url = clean_text(raw.get("url") or raw.get("landingPage") or f"https://catalog.data.gov/dataset/{raw.get('name')}")
-        title = clean_text(raw.get("title")) or clean_text(raw.get("name")) or source_key
+        landing_url = clean_text(
+            raw.get("url")
+            or raw.get("landingPage")
+            or f"https://catalog.data.gov/dataset/{raw.get('name')}"
+        )
+        title = (
+            clean_text(raw.get("title")) or clean_text(raw.get("name")) or source_key
+        )
         notes = clean_text(raw.get("notes"))
         extras_map = self._extras_map(raw.get("extras") or [])
 
         tags = unique_strings(
-            [tag.get("display_name") if isinstance(tag, dict) else tag for tag in raw.get("tags") or []]
-            + [group.get("display_name") if isinstance(group, dict) else group for group in raw.get("groups") or []]
+            [
+                tag.get("display_name") if isinstance(tag, dict) else tag
+                for tag in raw.get("tags") or []
+            ]
+            + [
+                group.get("display_name") if isinstance(group, dict) else group
+                for group in raw.get("groups") or []
+            ]
             + self._split_keywords(extras_map.get("keyword"))
             + self._split_keywords(extras_map.get("theme"))
         )
@@ -84,7 +98,11 @@ class DataGovCollector(BaseDatasetCollector):
         for resource in raw.get("resources") or []:
             if not isinstance(resource, dict):
                 continue
-            size_bytes = parse_bytes(resource.get("size") or resource.get("resource_size") or resource.get("package_size"))
+            size_bytes = parse_bytes(
+                resource.get("size")
+                or resource.get("resource_size")
+                or resource.get("package_size")
+            )
             if size_bytes:
                 total_size += size_bytes
             resources.append(
@@ -94,22 +112,31 @@ class DataGovCollector(BaseDatasetCollector):
                     "description": clean_text(resource.get("description")),
                     "url": clean_text(resource.get("url")),
                     "format": clean_text(resource.get("format")),
-                    "mime_type": clean_text(resource.get("mimetype") or resource.get("mimetype_inner")),
+                    "mime_type": clean_text(
+                        resource.get("mimetype") or resource.get("mimetype_inner")
+                    ),
                     "size_bytes": size_bytes,
                     "state": clean_text(resource.get("state")),
                 }
             )
 
-        access_level = clean_text(extras_map.get("accessLevel") or raw.get("accessLevel"))
+        access_level = clean_text(
+            extras_map.get("accessLevel") or raw.get("accessLevel")
+        )
         access_type = "OPEN"
         login_required = False
         approval_required = False
         payment_required = False
         is_restricted = False
-        if access_level and access_level.casefold() not in {"public", "open"}:
+        access_level_lower = access_level.casefold() if access_level else None
+        is_open_flag = raw.get("isopen")
+        if access_level_lower in {"public", "open"}:
+            access_type = "OPEN"
+            is_restricted = False
+        elif access_level and access_level.casefold() not in {"public", "open"}:
             access_type = "RESTRICTED"
             is_restricted = True
-        elif raw.get("isopen") is False:
+        elif is_open_flag is False:
             access_type = "RESTRICTED"
             is_restricted = True
 
@@ -120,8 +147,14 @@ class DataGovCollector(BaseDatasetCollector):
             or clean_text(raw.get("maintainer"))
         )
 
-        license_name = clean_text(raw.get("license_title") or raw.get("license_id") or extras_map.get("license"))
-        license_url = clean_text(raw.get("license_url") or extras_map.get("license_url"))
+        license_name = clean_text(
+            raw.get("license_title")
+            or raw.get("license_id")
+            or extras_map.get("license")
+        )
+        license_url = clean_text(
+            raw.get("license_url") or extras_map.get("license_url")
+        )
 
         return NormalizedDatasetRecord(
             source_dataset_key=source_key,
@@ -132,11 +165,16 @@ class DataGovCollector(BaseDatasetCollector):
             description_long=notes,
             publisher_name=publisher_name,
             domains=unique_strings(
-                [group.get("display_name") if isinstance(group, dict) else group for group in raw.get("groups") or []]
+                [
+                    group.get("display_name") if isinstance(group, dict) else group
+                    for group in raw.get("groups") or []
+                ]
                 + self._split_keywords(extras_map.get("theme"))
             ),
             tasks=self._split_keywords(extras_map.get("keyword")),
-            modalities=guess_modalities_from_text(title, notes, tags, [r.get("format") for r in resources]),
+            modalities=guess_modalities_from_text(
+                title, notes, tags, [r.get("format") for r in resources]
+            ),
             tags=tags,
             languages=languages,
             license_name=license_name,
@@ -147,9 +185,15 @@ class DataGovCollector(BaseDatasetCollector):
             payment_required=payment_required,
             is_restricted=is_restricted,
             source_created_at=parse_datetime(raw.get("metadata_created")),
-            source_updated_at=parse_datetime(raw.get("metadata_modified") or raw.get("revision_timestamp") or extras_map.get("modified")),
+            source_updated_at=parse_datetime(
+                raw.get("metadata_modified")
+                or raw.get("revision_timestamp")
+                or extras_map.get("modified")
+            ),
             source_version=clean_text(raw.get("revision_id") or raw.get("state")),
-            row_count=parse_int(extras_map.get("record_count") or extras_map.get("rows")),
+            row_count=parse_int(
+                extras_map.get("record_count") or extras_map.get("rows")
+            ),
             dataset_size_bytes=total_size or parse_bytes(extras_map.get("data_size")),
             creators_json=self._build_creators(raw, extras_map),
             resources_json=resources,
@@ -199,14 +243,22 @@ class DataGovCollector(BaseDatasetCollector):
             return org.get("title") or org.get("display_name") or org.get("name")
         return org
 
-    def _build_creators(self, raw: Dict[str, Any], extras_map: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _build_creators(
+        self, raw: Dict[str, Any], extras_map: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
         creators: List[Dict[str, Any]] = []
         author = clean_text(raw.get("author"))
         if author:
             creators.append({"name": author, "role": "author"})
         maintainer = clean_text(raw.get("maintainer"))
         if maintainer:
-            creators.append({"name": maintainer, "role": "maintainer", "email": clean_text(raw.get("maintainer_email"))})
+            creators.append(
+                {
+                    "name": maintainer,
+                    "role": "maintainer",
+                    "email": clean_text(raw.get("maintainer_email")),
+                }
+            )
         publisher = clean_text(extras_map.get("publisher"))
         if publisher:
             creators.append({"name": publisher, "role": "publisher"})

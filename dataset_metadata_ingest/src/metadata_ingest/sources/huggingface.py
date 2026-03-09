@@ -1,8 +1,7 @@
 from __future__ import annotations
 
+import importlib
 from typing import Any, Dict, Iterator, List, Optional, Tuple
-
-from huggingface_hub import HfApi
 
 from ..base import BaseDatasetCollector, ResumeGate
 from ..models import NormalizedDatasetRecord, SourceDefinition
@@ -32,8 +31,18 @@ SOURCE = SourceDefinition(
 class HuggingFaceCollector(BaseDatasetCollector):
     source = SOURCE
 
-    def iter_records(self, checkpoint: Dict[str, Any]) -> Iterator[Tuple[NormalizedDatasetRecord, Dict[str, Any]]]:
-        api = HfApi(token=self.settings.huggingface_token or None)
+    def iter_records(
+        self, checkpoint: Dict[str, Any]
+    ) -> Iterator[Tuple[NormalizedDatasetRecord, Dict[str, Any]]]:
+        try:
+            hub_module = importlib.import_module("huggingface_hub")
+            hf_api_cls = getattr(hub_module, "HfApi")
+        except Exception as exc:
+            raise ImportError(
+                "huggingface_hub 패키지가 설치되어 있지 않습니다. requirements.txt 기준으로 설치하세요."
+            ) from exc
+
+        api = hf_api_cls(token=self.settings.huggingface_token or None)
         resume_gate = ResumeGate(checkpoint.get("last_saved_source_dataset_key"))
 
         iterable = api.list_datasets(full=True, sort="last_modified")
@@ -47,7 +56,10 @@ class HuggingFaceCollector(BaseDatasetCollector):
                 continue
 
             try:
-                yield self._normalize(raw), {"sort": "last_modified", "direction": "desc"}
+                yield (
+                    self._normalize(raw),
+                    {"sort": "last_modified", "direction": "desc"},
+                )
             except Exception as exc:
                 self.note_failure(source_key, exc)
                 continue
@@ -121,6 +133,8 @@ class HuggingFaceCollector(BaseDatasetCollector):
             description_long = clean_text(card.get("description"))
         elif description_short:
             description_long = description_short
+        if description_short is None and description_long is not None:
+            description_short = description_long
 
         title = clean_text(card.get("pretty_name")) or source_key.split("/")[-1]
         subtitle = source_key if title != source_key else None
@@ -131,7 +145,9 @@ class HuggingFaceCollector(BaseDatasetCollector):
         )
 
         publisher_name = author or clean_text(safe_get(card, "publisher", "name"))
-        raw_domains = domains_from_urls([safe_get(raw, "cardData", "homepage"), safe_get(card, "homepage")])
+        raw_domains = domains_from_urls(
+            [safe_get(raw, "cardData", "homepage"), safe_get(card, "homepage")]
+        )
 
         return NormalizedDatasetRecord(
             source_dataset_key=source_key,
@@ -154,8 +170,12 @@ class HuggingFaceCollector(BaseDatasetCollector):
             approval_required=approval_required,
             payment_required=False,
             is_restricted=is_restricted,
-            source_created_at=parse_datetime(raw.get("createdAt") or raw.get("created_at")),
-            source_updated_at=parse_datetime(raw.get("lastModified") or raw.get("last_modified")),
+            source_created_at=parse_datetime(
+                raw.get("createdAt") or raw.get("created_at")
+            ),
+            source_updated_at=parse_datetime(
+                raw.get("lastModified") or raw.get("last_modified")
+            ),
             source_version=clean_text(raw.get("sha") or raw.get("lastModified")),
             row_count=row_count,
             dataset_size_bytes=dataset_size_bytes,
@@ -171,7 +191,9 @@ class HuggingFaceCollector(BaseDatasetCollector):
             },
             metrics_json={
                 "downloads": parse_int(raw.get("downloads")),
-                "downloads_all_time": parse_int(raw.get("downloadsAllTime") or raw.get("downloads_all_time")),
+                "downloads_all_time": parse_int(
+                    raw.get("downloadsAllTime") or raw.get("downloads_all_time")
+                ),
                 "likes": parse_int(raw.get("likes")),
             },
             extra_json={
@@ -198,7 +220,9 @@ class HuggingFaceCollector(BaseDatasetCollector):
         values = self._extract_prefixed_tags(tags, prefix)
         return values[0] if values else None
 
-    def _extract_dataset_size_bytes(self, raw: Dict[str, Any], card: Dict[str, Any]) -> Optional[int]:
+    def _extract_dataset_size_bytes(
+        self, raw: Dict[str, Any], card: Dict[str, Any]
+    ) -> Optional[int]:
         candidates = [
             safe_get(raw, "usedStorage"),
             safe_get(raw, "used_storage"),
@@ -227,7 +251,9 @@ class HuggingFaceCollector(BaseDatasetCollector):
                     break
         return total if matched else None
 
-    def _extract_row_count(self, raw: Dict[str, Any], card: Dict[str, Any]) -> Optional[int]:
+    def _extract_row_count(
+        self, raw: Dict[str, Any], card: Dict[str, Any]
+    ) -> Optional[int]:
         candidates = [
             safe_get(card, "dataset_info", "dataset_num_rows"),
             safe_get(card, "dataset_num_rows"),
@@ -244,7 +270,9 @@ class HuggingFaceCollector(BaseDatasetCollector):
             for split in ensure_list(dataset_info.get("splits")):
                 if not isinstance(split, dict):
                     continue
-                value = parse_int(split.get("num_examples") or split.get("dataset_num_rows"))
+                value = parse_int(
+                    split.get("num_examples") or split.get("dataset_num_rows")
+                )
                 if value is not None:
                     total += value
                     found = True
@@ -261,8 +289,14 @@ class HuggingFaceCollector(BaseDatasetCollector):
             if not isinstance(sibling, dict):
                 continue
             resource = {
-                "path": clean_text(sibling.get("rfilename") or sibling.get("path") or sibling.get("name")),
-                "size_bytes": parse_bytes(sibling.get("size") or sibling.get("size_in_bytes")),
+                "path": clean_text(
+                    sibling.get("rfilename")
+                    or sibling.get("path")
+                    or sibling.get("name")
+                ),
+                "size_bytes": parse_bytes(
+                    sibling.get("size") or sibling.get("size_in_bytes")
+                ),
                 "lfs": sibling.get("lfs"),
             }
             if resource["path"]:

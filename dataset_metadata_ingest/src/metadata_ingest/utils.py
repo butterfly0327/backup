@@ -2,16 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import html
+import importlib
 import json
 import math
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Sequence
 from urllib.parse import urlparse
-
-from bs4 import BeautifulSoup
-from dateutil import parser as dtparser
-
 
 _WHITESPACE_RE = re.compile(r"\s+")
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -28,7 +25,6 @@ def utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-
 def ensure_list(value: Any) -> List[Any]:
     if value is None:
         return []
@@ -37,7 +33,6 @@ def ensure_list(value: Any) -> List[Any]:
     if isinstance(value, tuple):
         return list(value)
     return [value]
-
 
 
 def clean_text(text: Any) -> Optional[str]:
@@ -55,14 +50,15 @@ def clean_text(text: Any) -> Optional[str]:
     return text or None
 
 
-
 def strip_html(raw_html: Optional[str]) -> Optional[str]:
     if raw_html is None:
         return None
-    soup = BeautifulSoup(raw_html, "lxml")
-    text = soup.get_text(" ", strip=True)
-    return clean_text(text)
-
+    try:
+        bs4 = importlib.import_module("bs4")
+    except Exception:
+        return clean_text(raw_html)
+    soup = bs4.BeautifulSoup(raw_html, "lxml")
+    return clean_text(soup.get_text(" ", strip=True))
 
 
 def text_to_lines(text: Optional[str]) -> List[str]:
@@ -70,7 +66,6 @@ def text_to_lines(text: Optional[str]) -> List[str]:
         return []
     text = html.unescape(text)
     return [line.strip() for line in text.splitlines() if line.strip()]
-
 
 
 def unique_strings(values: Iterable[Any]) -> List[str]:
@@ -92,7 +87,6 @@ def unique_strings(values: Iterable[Any]) -> List[str]:
     return result
 
 
-
 def compact_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     result: Dict[str, Any] = {}
     for key, value in data.items():
@@ -112,16 +106,15 @@ def compact_dict(data: Dict[str, Any]) -> Dict[str, Any]:
     return result
 
 
-
 def json_dumps_stable(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str)
-
+    return json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), default=str
+    )
 
 
 def sha256_json(value: Any) -> str:
     payload = json_dumps_stable(value).encode("utf-8")
     return hashlib.sha256(payload).hexdigest()
-
 
 
 def parse_datetime(value: Any) -> Optional[str]:
@@ -132,13 +125,16 @@ def parse_datetime(value: Any) -> Optional[str]:
             value = value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc).isoformat()
     try:
-        dt = dtparser.parse(str(value))
+        dateutil_parser = importlib.import_module("dateutil.parser")
+        dt = dateutil_parser.parse(str(value))
     except Exception:
-        return None
+        try:
+            dt = datetime.fromisoformat(str(value))
+        except Exception:
+            return None
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat()
-
 
 
 def parse_int(value: Any) -> Optional[int]:
@@ -165,7 +161,6 @@ def parse_int(value: Any) -> Optional[int]:
         return None
 
 
-
 def parse_float(value: Any) -> Optional[float]:
     if value in (None, ""):
         return None
@@ -185,7 +180,6 @@ def parse_float(value: Any) -> Optional[float]:
         return float(match.group(0))
     except ValueError:
         return None
-
 
 
 def parse_bool(value: Any) -> Optional[bool]:
@@ -232,7 +226,6 @@ def parse_bool(value: Any) -> Optional[bool]:
     return None
 
 
-
 def parse_bytes(value: Any) -> Optional[int]:
     if value in (None, ""):
         return None
@@ -265,7 +258,6 @@ def parse_bytes(value: Any) -> Optional[int]:
     return int(number * factor_map[unit])
 
 
-
 def first_non_empty(*values: Any) -> Any:
     for value in values:
         if value is None:
@@ -276,7 +268,6 @@ def first_non_empty(*values: Any) -> Any:
             continue
         return value
     return None
-
 
 
 def build_search_text(*parts: Any) -> Optional[str]:
@@ -307,7 +298,6 @@ def build_search_text(*parts: Any) -> Optional[str]:
     return result or None
 
 
-
 def domain_from_url(url: Optional[str]) -> Optional[str]:
     if not url:
         return None
@@ -319,10 +309,8 @@ def domain_from_url(url: Optional[str]) -> Optional[str]:
     return domain or None
 
 
-
 def domains_from_urls(urls: Iterable[Optional[str]]) -> List[str]:
     return unique_strings(domain_from_url(url) for url in urls if url)
-
 
 
 def build_field_presence(record: Dict[str, Any]) -> Dict[str, Any]:
@@ -340,7 +328,9 @@ def build_field_presence(record: Dict[str, Any]) -> Dict[str, Any]:
             json_keys[key] = len(value)
             scalar_fields[key] = len(value) > 0
         else:
-            scalar_fields[key] = value is not None and (not isinstance(value, str) or bool(value.strip()))
+            scalar_fields[key] = value is not None and (
+                not isinstance(value, str) or bool(value.strip())
+            )
 
     return {
         "has": scalar_fields,
@@ -349,18 +339,54 @@ def build_field_presence(record: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-
 def guess_modalities_from_text(*parts: Any) -> List[str]:
     text = build_search_text(*parts) or ""
     lowered = text.casefold()
     mapping = {
-        "text": ["text", "문자", "텍스트", "corpus", "qa", "translation", "document", "pdf"],
-        "image": ["image", "이미지", "사진", "jpg", "jpeg", "png", "segmentation", "object detection"],
+        "text": [
+            "text",
+            "문자",
+            "텍스트",
+            "corpus",
+            "qa",
+            "translation",
+            "document",
+            "pdf",
+        ],
+        "image": [
+            "image",
+            "이미지",
+            "사진",
+            "jpg",
+            "jpeg",
+            "png",
+            "segmentation",
+            "object detection",
+        ],
         "audio": ["audio", "음성", "소리", "speech", "wav", "mp3"],
         "video": ["video", "영상", "동영상", "mp4", "avi"],
-        "tabular": ["csv", "xlsx", "xls", "parquet", "table", "tabular", "structured", "정형", "표"],
+        "tabular": [
+            "csv",
+            "xlsx",
+            "xls",
+            "parquet",
+            "table",
+            "tabular",
+            "structured",
+            "정형",
+            "표",
+        ],
         "multimodal": ["multimodal", "multi-modal", "멀티모달"],
-        "geospatial": ["geospatial", "geojson", "shp", "wms", "지도", "공간", "satellite", "raster"],
+        "geospatial": [
+            "geospatial",
+            "geojson",
+            "shp",
+            "wms",
+            "지도",
+            "공간",
+            "satellite",
+            "raster",
+        ],
         "time-series": ["time series", "timeseries", "시계열"],
         "3d": ["3d", "point cloud", "obj", "fbx", "mesh", "lidar"],
     }
@@ -371,15 +397,15 @@ def guess_modalities_from_text(*parts: Any) -> List[str]:
     return unique_strings(result)
 
 
-
 def guess_tasks_from_tags(tags: Iterable[str]) -> List[str]:
     values = [clean_text(tag) for tag in tags]
     values = [v for v in values if v]
     return unique_strings(values)
 
 
-
-def infer_commercial_use_from_license(license_name: Optional[str], license_url: Optional[str] = None) -> Optional[bool]:
+def infer_commercial_use_from_license(
+    license_name: Optional[str], license_url: Optional[str] = None
+) -> Optional[bool]:
     text = (license_name or "") + " " + (license_url or "")
     lowered = text.casefold()
     if not lowered.strip():
@@ -407,7 +433,6 @@ def infer_commercial_use_from_license(license_name: Optional[str], license_url: 
     return None
 
 
-
 def extract_uuid(value: Optional[str]) -> Optional[str]:
     if not value:
         return None
@@ -415,12 +440,12 @@ def extract_uuid(value: Optional[str]) -> Optional[str]:
     return match.group(0) if match else None
 
 
-
 def extract_hashtags(text: Optional[str]) -> List[str]:
     if not text:
         return []
-    return unique_strings(match.group(1) for match in re.finditer(r"#([^#\s]+(?:\s+[^#\s]+)*)", text))
-
+    return unique_strings(
+        match.group(1) for match in re.finditer(r"#([^#\s]+(?:\s+[^#\s]+)*)", text)
+    )
 
 
 def chunked(seq: Sequence[Any], size: int) -> Iterator[Sequence[Any]]:
@@ -428,7 +453,6 @@ def chunked(seq: Sequence[Any], size: int) -> Iterator[Sequence[Any]]:
         raise ValueError("size must be >= 1")
     for idx in range(0, len(seq), size):
         yield seq[idx : idx + size]
-
 
 
 def safe_get(data: Any, *path: Any) -> Any:
@@ -449,7 +473,6 @@ def safe_get(data: Any, *path: Any) -> Any:
     return current
 
 
-
 def to_serializable(value: Any) -> Any:
     if value is None:
         return None
@@ -464,7 +487,6 @@ def to_serializable(value: Any) -> Any:
     if hasattr(value, "__dict__"):
         return to_serializable(vars(value))
     return str(value)
-
 
 
 def parse_kv_text_block(text: Optional[str]) -> Dict[str, str]:
@@ -522,6 +544,9 @@ def parse_kv_text_block(text: Optional[str]) -> Dict[str, str]:
         "조회수",
         "다운로드",
         "데이터 유형",
+        "데이터셋명",
+        "데이터셋 이름",
+        "데이터명",
         "데이터 포맷",
         "데이터 출처",
         "라벨링 유형",
@@ -559,7 +584,6 @@ def parse_kv_text_block(text: Optional[str]) -> Dict[str, str]:
     return result
 
 
-
 def jsonld_value(value: Any) -> Any:
     if isinstance(value, dict):
         if "@value" in value:
@@ -567,7 +591,6 @@ def jsonld_value(value: Any) -> Any:
         if "@id" in value and len(value) == 1:
             return value.get("@id")
     return value
-
 
 
 def jsonld_first(data: Dict[str, Any], keys: Iterable[str]) -> Any:
@@ -589,7 +612,6 @@ def jsonld_first(data: Dict[str, Any], keys: Iterable[str]) -> Any:
     return None
 
 
-
 def jsonld_collect_text(data: Dict[str, Any], keys: Iterable[str]) -> List[str]:
     result: List[str] = []
     for key in keys:
@@ -606,7 +628,6 @@ def jsonld_collect_text(data: Dict[str, Any], keys: Iterable[str]) -> List[str]:
             if cleaned:
                 result.append(cleaned)
     return unique_strings(result)
-
 
 
 def merge_dicts(*values: Optional[Dict[str, Any]]) -> Dict[str, Any]:

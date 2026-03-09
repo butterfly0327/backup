@@ -102,7 +102,7 @@ dataset_metadata_ingest/
 
 1. `dataset_source` row 보장
 2. `collection_dataset` 에 RUNNING row 생성
-3. 이전 실패/중지/부분성공 run의 checkpoint 읽기 (`resume=True` 일 때)
+3. 이전 run의 checkpoint 읽기 (`resume=True` 일 때, `RUNNING/FAILED/STOPPED/PARTIAL_SUCCESS/SUCCESS` 포함)
 4. 주기적으로 `collected_count`, `upserted_count`, `failed_count`, `last_saved_source_dataset_key`, `checkpoint_json` 갱신
 5. 정상 종료 시 `SUCCESS` 또는 `PARTIAL_SUCCESS`
 6. 예외 시 `FAILED`
@@ -117,6 +117,7 @@ collector는 현재 run 중 **마지막으로 DB에 성공 저장된 dataset key
 - 일부 레코드 detail fetch 실패 → 실패는 카운트하고 계속 진행
 - DB upsert 실패 → 그 레코드는 실패 처리, checkpoint는 이전 성공 지점 유지
 - 프로세스 중단 → 다음 실행 시 마지막 성공 저장 지점 이후부터 재개 시도
+- 정상 완료(SUCCESS) 후 재실행 → 직전 성공 run의 마지막 저장 지점 이후부터 재개 시도
 
 정확히 말하면 소스마다 “페이지 + 마지막 저장 key” 기준으로 재개한다. 따라서 재시작 시 **같은 페이지를 한 번 더 읽고 마지막 key 전까지 skip** 하는 방식이 많다.
 
@@ -527,6 +528,7 @@ Figshare는 **파일 메타데이터와 저자 정보가 매우 좋고**, 라이
 
 - Dataverse의 메타데이터 블록 구조가 복합(compound) 형태라서, 모든 custom field를 완벽하게 평탄화하지는 않았다.
 - file_count는 잘 얻어도 실제 row_count는 보통 알 수 없어 `row_count` 는 NULL로 둔다.
+- 간헐적으로 빈 본문/비JSON 응답이 올 수 있어, 현재 구현은 JSON 파싱 가드(`_get_json_with_guard`)로 재시도 후 skip 처리한다.
 
 #### 총평
 
@@ -832,7 +834,7 @@ data.europa.eu 는 **DCAT-AP / distribution / publisher / accessRights / conform
 ### 실행 시작 시
 
 - `dataset_source` row를 보장한다.
-- `resume=True` 면 최근 `RUNNING / FAILED / STOPPED / PARTIAL_SUCCESS` run의 checkpoint를 읽는다.
+- `resume=True` 면 최근 `RUNNING / FAILED / STOPPED / PARTIAL_SUCCESS / SUCCESS` run의 checkpoint를 읽는다.
 - 새 `collection_dataset` row를 `RUNNING` 으로 생성한다.
 
 ### 실행 중
@@ -870,15 +872,15 @@ data.europa.eu 는 **DCAT-AP / distribution / publisher / accessRights / conform
 
 이건 솔직하게 적는다.
 
-### 10-1. 일부 소스는 live endpoint 테스트를 이 환경에서 직접 끝까지 돌리지는 못했다
+### 10-1. 실운영 전에는 소량 smoke 테스트를 먼저 권장한다
 
-현재 내가 이 산출물을 만든 환경에서는 외부 인터넷에 직접 붙여서 전체 수집을 실운영 수준으로 끝까지 돌릴 수 없었다.
+현재 구현은 실환경에서 소량 smoke 테스트(`--safe --limit 1` 또는 `--safe --limit 5`)로 안정성 확인 후 확장 실행하는 운영 절차를 권장한다.
 
 즉,
 
-- 문법 검증은 완료
-- 공식 문서/실제 공개 페이지 구조를 기준으로 collector를 작성
-- 하지만 실제 운영 환경에서는 **첫 실행 후 소수의 selector/응답 필드 보정** 이 필요할 수 있다
+- 문법 검증 + 소량 실수집 검증을 먼저 수행
+- 이후 source별로 limit를 늘려 단계적으로 확장
+- 운영 환경에서는 **selector/응답 필드 보정** 이 필요할 수 있음
 
 이건 특히 아래 4개가 가능성이 있다.
 

@@ -89,14 +89,28 @@ class PublicDataPortalCollector(BaseDatasetCollector):
     def _list_url_variants(self, page: int) -> List[str]:
         template = self.settings.public_data_portal_list_url_template
         base_url = template.format(page=page)
-        variants: List[str] = [base_url]
+        variants: List[str] = []
+        for locale_url in self._locale_url_variants(base_url):
+            variants.append(locale_url)
 
-        if "dType=" not in base_url:
-            return variants
+            if "dType=" not in locale_url:
+                continue
 
-        dtypes = ["FILE", "API", "STANDARD", "LINK"]
-        for dtype in dtypes:
-            variants.append(self._replace_query_param(base_url, "dType", dtype))
+            for dtype in ["FILE", "API", "STANDARD", "LINK"]:
+                variants.append(self._replace_query_param(locale_url, "dType", dtype))
+
+        return unique_strings(variants)
+
+    def _locale_url_variants(self, url: str) -> List[str]:
+        variants = [url]
+        split_result = urlsplit(url)
+        path = split_result.path
+
+        if "/en/" in path:
+            variants.append(urlunsplit((split_result.scheme, split_result.netloc, path.replace("/en/", "/", 1), split_result.query, split_result.fragment)))
+        elif path.startswith("/tcs/"):
+            variants.append(urlunsplit((split_result.scheme, split_result.netloc, f"/en{path}", split_result.query, split_result.fragment)))
+
         return unique_strings(variants)
 
     def _replace_query_param(self, url: str, key: str, value: str) -> str:
@@ -119,7 +133,7 @@ class PublicDataPortalCollector(BaseDatasetCollector):
         seen: Set[str] = set()
         for anchor in soup.select('a[href*="/data/"][href*="/fileData.do"]'):
             href = anchor.get("href")
-            if not href:
+            if not isinstance(href, str) or not href:
                 continue
             url = urljoin(self.source.base_url, href)
             if url in seen:
@@ -152,18 +166,22 @@ class PublicDataPortalCollector(BaseDatasetCollector):
         detail_text = detail_soup.get_text(" ", strip=True)
         kv = parse_kv_text_block(detail_text)
         schema_dataset = self._extract_schema_dataset(schema_json)
+        og_title = detail_soup.select_one("meta[property='og:title']")
+        h1_tag = detail_soup.select_one("h1")
+        h2_tag = detail_soup.select_one("h2")
+        meta_description = detail_soup.select_one("meta[name='description']")
 
         title = (
             self._schema_text(schema_dataset, "name")
-            or clean_text(detail_soup.select_one("meta[property='og:title']").get("content") if detail_soup.select_one("meta[property='og:title']") else None)
-            or clean_text(detail_soup.select_one("h1").get_text(" ", strip=True) if detail_soup.select_one("h1") else None)
-            or clean_text(detail_soup.select_one("h2").get_text(" ", strip=True) if detail_soup.select_one("h2") else None)
+            or clean_text(og_title.get("content") if og_title else None)
+            or clean_text(h1_tag.get_text(" ", strip=True) if h1_tag else None)
+            or clean_text(h2_tag.get_text(" ", strip=True) if h2_tag else None)
             or source_key
         )
 
         description = (
             self._schema_text(schema_dataset, "description")
-            or clean_text(detail_soup.select_one("meta[name='description']").get("content") if detail_soup.select_one("meta[name='description']") else None)
+            or clean_text(meta_description.get("content") if meta_description else None)
             or kv.get("Description")
             or kv.get("Explanation")
         )
@@ -279,14 +297,15 @@ class PublicDataPortalCollector(BaseDatasetCollector):
         if not schema_json:
             return {}
         if isinstance(schema_json, dict):
-            if isinstance(schema_json.get("@graph"), list):
-                for node in schema_json.get("@graph") or []:
+            graph_nodes = schema_json.get("@graph")
+            if isinstance(graph_nodes, list):
+                for node in graph_nodes:
                     if not isinstance(node, dict):
                         continue
                     types = ensure_list(node.get("@type"))
                     if any(str(t).endswith("Dataset") for t in types):
                         return node
-                return schema_json.get("@graph")[0] if schema_json.get("@graph") else {}
+                return graph_nodes[0] if graph_nodes else {}
             return schema_json
         return {}
 
